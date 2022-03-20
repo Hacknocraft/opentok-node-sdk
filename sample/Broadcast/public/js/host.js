@@ -1,20 +1,26 @@
-/* global OT, apiKey, sessionId, token, $, layout, focusStreamId */
+/* global OT, apiKey, sessionId, initialBroadcastId, token, $, initialLayout, focusStreamId */
 /* eslint-disable no-console */
 
 var session = OT.initSession(apiKey, sessionId);
 var publisher = OT.initPublisher('publisher', {
   insertMode: 'append',
   width: '100%',
-  height: '100%'
+  height: '100%',
+  resolution: '1280x720'
 });
-var archiveID = null;
+var broadcastId = initialBroadcastId;
+var layout = initialLayout;
 
 function disableForm() {
-  $('.archive-options-fields').attr('disabled', 'disabled');
+  $('.broadcast-options-fields').attr('disabled', 'disabled');
+  $('.start').hide();
+  $('.stop').show();
 }
 
 function enableForm() {
-  $('.archive-options-fields').removeAttr('disabled');
+  $('.broadcast-options-fields').removeAttr('disabled');
+  $('.start').show();
+  $('.stop').hide();
 }
 
 function positionStreams() {
@@ -48,8 +54,8 @@ function setFocus(focusStreamId) {
     otherStreams: otherStreams
   }).done(function () {
     console.log('Focus changed.');
-  }).fail(function (jqXHR, textStatus, errorThrown) {
-    console.error('Stream class list error:', errorThrown);
+  }).fail(function (jqXHR) {
+    console.error('Stream class list error:', jqXHR.responseText);
   });
 
   $('.focus').removeClass('focus');
@@ -69,8 +75,13 @@ function createFocusClick(elementId, focusStreamId) {
   });
 }
 
-if (layout === 'verticalPresentation') {
+if (initialLayout === 'verticalPresentation') {
   $('#streams').addClass('vertical');
+}
+
+if (initialLayout === 'verticalPresentation') {
+  $('.start').hide();
+  $('.stop').show();
 }
 
 session.connect(token, function (err) {
@@ -113,35 +124,38 @@ session.on('streamDestroyed', function (event) {
   positionStreams();
 });
 
-session.on('archiveStarted', function (event) {
-  archiveID = event.id;
-  console.log('ARCHIVE STARTED');
-  $('.start').hide();
-  $('.stop').show();
-  disableForm();
-});
-
-session.on('archiveStopped', function () {
-  archiveID = null;
-  console.log('ARCHIVE STOPPED');
-  $('.start').show();
-  $('.stop').hide();
-  enableForm();
-});
-
 $(document).ready(function () {
   $('.start').click(function () {
-    var options = $('.archive-options').serialize();
+    var options = {
+      maxDuration: $('input[name=maxDuration]').val() || undefined,
+      resolution: $('input[name=resolution]:checked').val(),
+      layout: {
+        type: layout
+      }
+    };
     disableForm();
     $.post('/start', options)
-      .fail(enableForm);
+      .done(function (response) {
+        console.log('start success.');
+        broadcastId = response.id;
+      })
+      .fail(function (jqXHR) {
+        console.error(jqXHR.responseText);
+        enableForm();
+      });
   }).prop('disabled', false);
   $('.stop').click(function () {
-    $.get('stop/' + archiveID);
+    $.get('stop/' + broadcastId)
+      .done(function () {
+        console.log('stop success.');
+        broadcastId = null;
+        enableForm();
+      })
+      .fail(function (jqXHR) {
+        console.error(jqXHR.responseText);
+      });
   });
   $('.toggle-layout').click(function () {
-    var newLayoutClass;
-
     if ($('#streams').hasClass('vertical')) {
       $('#streams').removeClass('vertical');
     }
@@ -151,22 +165,20 @@ $(document).ready(function () {
 
     positionStreams();
 
-    newLayoutClass = $('#streams').hasClass('vertical') ? 'verticalPresentation'
+    layout = $('#streams').hasClass('vertical') ? 'verticalPresentation'
       : 'horizontalPresentation';
 
-    if (archiveID) {
-      $.post('archive/' + archiveID + '/layout', {
-        type: newLayoutClass
-      }).done(function () {
-        console.log('Archive layout updated.');
-      }).fail(function (jqXHR) {
-        console.error('Archive layout error:', jqXHR.responseText);
-      });
-    }
+    $.post('broadcast/' + broadcastId + '/layout', {
+      type: layout
+    }).done(function () {
+      console.log('Broadcast layout updated.');
+    }).fail(function (jqXHR) {
+      console.error('Broadcast layout error:', jqXHR.responseText);
+    });
 
     session.signal({
       type: 'layoutClass',
-      data: newLayoutClass
+      data: layout
     });
   });
 });

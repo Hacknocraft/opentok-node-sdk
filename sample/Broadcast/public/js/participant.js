@@ -14,7 +14,8 @@ $('#streams').append(container);
 publisher = OT.initPublisher('publisher', {
   insertMode: 'append',
   width: '100%',
-  height: '100%'
+  height: '100%',
+  resolution: '1280x720'
 });
 
 function positionStreams() {
